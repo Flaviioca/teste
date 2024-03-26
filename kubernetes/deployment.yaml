@@ -1,0 +1,114 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ceua
+  namespace: ceua
+spec:
+  revisionHistoryLimit: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: ceua
+  template:
+    metadata:
+      labels:
+        app: ceua
+    spec:
+      initContainers:
+        - name: ceua-migration
+          image: harbor.ufpe.br/ceua/ceua:latest
+            imagePullPolicy: Always
+          command: ["/bin/sh","-c", "npx sequelize-cli db:migrate && npx sequelize-cli db:seed:all"]
+          envFrom:
+            - configMapRef:
+                name: ceua-conf
+            - secretRef:
+                name: ceua-secret
+      volumes:
+      - name: pv-arquivos
+        persistentVolumeClaim:
+          claimName: ceua-pvc
+      containers:
+      - name: ceua
+        image: harbor.ufpe.br/ceua/ceua:latest
+        imagePullPolicy: Always
+        env:
+          - name: TZ
+            value: America/Recife
+        envFrom:
+          - configMapRef:
+              name: ceua-conf
+          - secretRef:
+              name: ceua-secret
+        volumeMounts:
+            - name: pv-arquivos
+              mountPath: /usr/src/app/storage
+
+        resources:
+          requests:
+            memory: "1Gi"
+            cpu: "500m"
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"
+        ports:
+        - containerPort: 3000
+      imagePullSecrets:
+        - name: harbor-prod
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: ceua
+  namespace: ceua
+spec:
+  selector:
+    app: ceua
+  ports:
+  - port: 3000
+    targetPort: 3000
+  sessionAffinity: ClientIP
+
+---
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ceua-conf
+  namespace: ceua
+data:
+  APP_NAME: "CEUA"
+  NODE_ENV: "development"
+  TZ: "America/Recife"
+  MAIL_FROM_ADDRESS: "no-replyceua@ufpe.br"
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ceua
+  namespace: ceua
+  labels:
+    name: ceua
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
+    nginx.org/redirect-to-https: "true"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+      - "*.ufpe.br"
+      secretName: ufpe-cert
+  rules:
+  - host: ceua-staging.ufpe.br
+    http:
+      paths:
+      - pathType: Prefix
+        path: "/"
+        backend:
+          service:
+            name: ceua
+            port:
+              number: 3000

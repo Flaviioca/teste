@@ -1,0 +1,65 @@
+version: '2'
+
+services:
+
+  postgres:
+    image: postgres:13.4
+    container_name: postgres_projeto_ceua
+    restart: always
+    environment:
+      - POSTGRES_DB=my_database
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - TIME_ZONE="America/Recife"
+      - PGUSER=postgres
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    logging:
+      options:
+        max-size: 10m
+        max-file: "3"
+    ports:
+      - 5438:5432
+    volumes:
+      - "./data/postgres:/var/lib/postgresql/data"
+      # copy the sql script to create tables
+      #- ./sql/create_tables.sql:/docker-entrypoint-initdb.d/create_tables.sql
+
+  app-prod:
+    image: ceua:prod
+    container_name: ceua_app_prod
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - 8080:3000
+    volumes:
+      # - "./data:/usr/src/app/data"
+      - "./data/storage/sessions:/usr/src/app/storage/sessions"
+      - "./data/storage/uploads:/usr/src/app/storage/uploads"
+    environment:
+      - CONTAINER_ENV='docker'
+
+  app-dev:
+    image: ceua:dev
+    container_name: ceua_app_dev
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - 3000:3000
+    volumes:
+      - './:/usr/src/app'
+      - '/usr/src/app/node_modules' # Remove this if you have pure JS dependencies
+    environment:
+      - CONTAINER_ENV='docker'
+      - CHOKIDAR_USEPOLLING=true

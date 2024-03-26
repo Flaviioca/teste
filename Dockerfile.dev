@@ -1,0 +1,16 @@
+FROM node:18.16-alpine3.16
+# RUN apk add py3-pip=22.1.1-r0 && apk add gcc=11.2.1_git20220219-r2 && pip install dumb-init
+ENV NODE_ENV development
+ARG APP_DIR=/usr/src/app
+WORKDIR ${APP_DIR}
+
+# Install dependencies
+COPY package.json .
+RUN npm install --quiet
+
+# Bundle app source
+COPY . ./
+
+EXPOSE 3000
+# CMD ["dumb-init", "npm", "run", "start-dev"]
+CMD ["npm", "run", "start-dev"]
